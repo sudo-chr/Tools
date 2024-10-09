@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Carica file CSV</title>
+    <!-- SheetJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- FileSaver.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            font-size: 16px;
+        }
+        #preview {
+            margin-top: 20px;
+            overflow-x: auto;
+        }
+        table {
+            border-collapse: collapse;
+            table-layout: auto;
+            width: auto;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            word-wrap: break-word;
+            white-space: normal;
+            word-break: break-word;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {background-color: #f9f9f9;}
+        tr:nth-child(odd) {background-color: #ffffff;}
+        tbody tr:hover {
+            background-color: #e0e0e0;
+        }
+        button {
+            margin-right: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #headerSection {
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        #headerSection label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        #headerSection input {
+            padding: 8px;
+            width: 300px;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        .error {
+            color: red;
+            display: none;
+            margin-top: 5px;
+            font-size: 14px;
+        }
+        #confirmationMessage {
+            color: green;
+            display: none;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+        #mainTitle {
+            font-size: 14px; /* Dimensione più piccola */
+            margin-bottom: 20px;
+        }
+        #footer {
+            font-size: 12px;
+            font-style: italic; 
+            text-align: left; /* Allineamento a sinistra */
+            margin-top: 20px;
+        }
+        /* Stili per la versione stampata */
+        @media print {
+            body {
+                margin: 0;
+            }
+            body * {
+                visibility: hidden;
+            }
+            #printableSection, #printableSection * {
+                visibility: visible;
+            }
+            #printableSection {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            table {
+                page-break-after: always;
+                font-size: 12px;
+            }
+            th, td {
+                height: 20px;
+            }
+            td[data-col="Appar."], th[data-col="Appar."] {
+                white-space: nowrap;
+            }
+            @page {
+                margin: 0;
+                margin-left: 20mm;
+                margin-bottom: 20mm;
+            }
+            /* Nasconde il footer durante la stampa */
+            #footer {
+                display: none;
+            }
+            /* Nasconde gli input e mostra i valori in span */
+            #headerSection input {
+                display: none;
+            }
+            #headerSection .printable-value {
+                display: block;
+            }
+            /* Aggiungi numeri di pagina */
+            .page-number:after {
+                counter-increment: page;
+                content: "Pagina " counter(page);
+                position: fixed;
+                bottom: 10mm;
+                left: 50%;
+                transform: translateX(-50%);
+                font-size: 12px;
+            }
+        }
+        /* Stili per la versione su schermo */
+        @media screen {
+            #headerSection .printable-value {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="mainTitle">Carica il file .csv esportato dall'elenco letture di CRM</div>
+    <input type="file" id="inputFile" accept=".xlsx, .xls, .csv" />
+    
+    <div id="printableSection">
+        <div id="headerSection">
+            <h2>Storico letture</h2>
+            <label for="numeroUtenza">Numero Utenza:</label>
+            <input type="number" id="numeroUtenza" placeholder="Inserisci il numero utenza" />
+            <span id="numeroUtenzaError" class="error">Per favore, inserisci un numero utenza valido.</span>
+            <span class="printable-value" id="numeroUtenzaPrint"></span>
+            
+            <label for="intestazioneUtenza">Intestatario:</label>
+            <input type="text" id="intestazioneUtenza" placeholder="Inserisci l'intestatario utenza" />
+            <span id="intestazioneUtenzaError" class="error">Il campo Intestatario non può essere vuoto.</span>
+            <span class="printable-value" id="intestazioneUtenzaPrint"></span>
+        </div>
+        <div id="preview"></div>
+    </div>
+    
+    <div style="margin-top: 20px;">
+        <button id="saveBtn" disabled>Salva Nuovo File</button>
+        <button id="printBtn" disabled>Stampa</button>
+        <button id="resetBtn">Reset</button>
+        <div id="confirmationMessage">File salvato con successo!</div>
+    </div>
+
+    <div id="footer">
+        Tool realizzato da Christian Capuani in data 09/10/2024 - Versione 1.0
+    </div>
+
+    <script>
+        // Configura le colonne da eliminare
+        const colonneDaEliminare = [
+            "Stato",
+            "Settore merceologico",
+            "Mot.lettura",
+            "Foto",
+            "Unità di lettura",
+            "Nota di lettura",
+            "__EMPTY"  // Aggiunto per rimuovere la colonna vuota
+        ];
+
+        const inputFile = document.getElementById('inputFile');
+        const preview = document.getElementById('preview');
+        const saveBtn = document.getElementById('saveBtn');
+        const printBtn = document.getElementById('printBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const numeroUtenza = document.getElementById('numeroUtenza');
+        const intestazioneUtenza = document.getElementById('intestazioneUtenza');
+
+        const numeroUtenzaError = document.getElementById('numeroUtenzaError');
+        const intestazioneUtenzaError = document.getElementById('intestazioneUtenzaError');
+        const confirmationMessage = document.getElementById('confirmationMessage');
+
+        const numeroUtenzaPrint = document.getElementById('numeroUtenzaPrint');
+        const intestazioneUtenzaPrint = document.getElementById('intestazioneUtenzaPrint');
+
+        let workbook;
+        let datiFinali;
+
+        inputFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const data = evt.target.result;
+                const fileExtension = file.name.split('.').pop().toLowerCase();
+
+                let workbookTemp;
+                if (fileExtension === 'csv') {
+                    workbookTemp = XLSX.read(data, {type: 'binary', raw: true});
+                } else {
+                    workbookTemp = XLSX.read(data, {type: 'binary', raw: true});
+                }
+
+                workbook = workbookTemp;
+                processWorkbook(workbook);
+            };
+
+            if (file.type === "text/csv") {
+                reader.readAsText(file);
+            } else {
+                reader.readAsBinaryString(file);
+            }
+        });
+
+        function processWorkbook(workbook) {
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            let jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+
+            if (jsonData.length === 0) {
+                alert("Il file Excel/CSV è vuoto o non contiene dati.");
+                return;
+            }
+
+            // Filtra le intestazioni per rimuovere colonne vuote e quelle da eliminare
+            const intestazioni = Object.keys(jsonData[0]).filter(colonna => colonna.trim() !== "" && !colonneDaEliminare.includes(colonna));
+
+            datiFinali = jsonData.map(riga => {
+                const rigaFiltrata = {};
+                intestazioni.forEach(colonna => {
+                    if (riga[colonna] !== undefined) {
+                        rigaFiltrata[colonna] = riga[colonna];
+                    }
+                });
+                return rigaFiltrata;
+            }).filter(riga => Object.keys(riga).length > 0); // Filtra righe vuote
+
+            visualizzaDati(datiFinali);
+            enableButtons();
+        }
+
+        function visualizzaDati(data) {
+            preview.innerHTML = ""; // Pulisci il contenuto precedente
+
+            const table = document.createElement('table');
+            const headerRow = document.createElement('tr');
+
+            // Creazione intestazione della tabella
+            Object.keys(data[0]).forEach(colonna => {
+                const th = document.createElement('th');
+                th.textContent = colonna;
+                headerRow.appendChild(th);
+            });
+
+            table.appendChild(headerRow);
+
+            // Creazione delle righe della tabella
+            data.forEach(riga => {
+                const row = document.createElement('tr');
+                Object.values(riga).forEach(valore => {
+                    const td = document.createElement('td');
+                    td.textContent = valore;
+                    row.appendChild(td);
+                });
+                table.appendChild(row);
+            });
+
+            preview.appendChild(table);
+        }
+
+        function enableButtons() {
+            saveBtn.disabled = false;
+            printBtn.disabled = false;
+        }
+
+        saveBtn.addEventListener('click', () => {
+            const ws = XLSX.utils.json_to_sheet(datiFinali);
+            const newWorkbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(newWorkbook, ws, 'Foglio1');
+
+            const fileName = `dati_salvati_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            XLSX.writeFile(newWorkbook, fileName);
+            confirmationMessage.style.display = "block";
+            setTimeout(() => {
+                confirmationMessage.style.display = "none";
+            }, 3000);
+        });
+
+        printBtn.addEventListener('click', () => {
+            // Controllo dei campi obbligatori
+            if (!numeroUtenza.value || !intestazioneUtenza.value) {
+                alert("Per favore, compila i campi 'Numero Utenza' e 'Intestatario' prima di procedere alla stampa.");
+                return; // Blocca la stampa
+            }
+
+            // Aggiorna i valori stampabili
+            numeroUtenzaPrint.textContent = numeroUtenza.value;
+            intestazioneUtenzaPrint.textContent = intestazioneUtenza.value;
+
+            window.print();
+        });
+
+        resetBtn.addEventListener('click', () => {
+            inputFile.value = "";
+            preview.innerHTML = "";
+            numeroUtenza.value = "";
+            intestazioneUtenza.value = "";
+            numeroUtenzaPrint.textContent = "";
+            intestazioneUtenzaPrint.textContent = "";
+            confirmationMessage.style.display = "none";
+            saveBtn.disabled = true;
+            printBtn.disabled = true;
+        });
+    </script>
+</body>
+</html>
