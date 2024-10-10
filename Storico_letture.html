@@ -172,7 +172,7 @@
     </div>
 
     <div id="footer">
-        Tool realizzato da Christian Capuani in data 09/10/2024 - Versione 1.1
+        Tool realizzato da Christian Capuani in data 09/10/2024 - Versione 1.0
     </div>
 
     <script>
@@ -272,8 +272,16 @@
             // Salva il nuovo file modificato
             saveBtn.disabled = false;
             printBtn.disabled = false;
+
             saveBtn.addEventListener('click', function() {
                 salvaFile(datiFiltrati);
+            });
+
+            printBtn.addEventListener('click', function() {
+                // Aggiorna i valori dei campi per la stampa
+                numeroUtenzaPrint.textContent = numeroUtenza.value;
+                intestazioneUtenzaPrint.textContent = intestazioneUtenza.value;
+                window.print();
             });
         }
 
